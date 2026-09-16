@@ -36,7 +36,7 @@ export function ScratchPage() {
   const isDrawingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
   const hasInitializedRef = useRef(false);
-  const dprRef = useRef(window.devicePixelRatio || 1);
+  const canvasSizeRef = useRef({ width: 0, height: 0 });
 
   const settings = state.scratch;
   const totalWeight = settings.prizes.reduce((sum, p) => sum + p.weight, 0);
@@ -53,13 +53,14 @@ export function ScratchPage() {
     const rect = container.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return false;
 
-    const dpr = dprRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const bitmapWidth = Math.floor(rect.width * dpr);
+    const bitmapHeight = Math.floor(rect.height * dpr);
     
-    canvas.width = Math.floor(rect.width * dpr);
-    canvas.height = Math.floor(rect.height * dpr);
+    canvas.width = bitmapWidth;
+    canvas.height = bitmapHeight;
     
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = `${rect.height}px`;
+    canvasSizeRef.current = { width: rect.width, height: rect.height };
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return false;
@@ -119,9 +120,28 @@ export function ScratchPage() {
         });
       };
 
-      attemptInit();
+      setTimeout(() => attemptInit(), 50);
     }
   }, [selectedDesign, isRevealed, initCanvas, draw]);
+
+  useEffect(() => {
+    if (!selectedDesign || isRevealed || !canvasReady) return;
+
+    const handleResize = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      
+      const rect = container.getBoundingClientRect();
+      const { width: oldWidth, height: oldHeight } = canvasSizeRef.current;
+      
+      if (Math.abs(rect.width - oldWidth) > 1 || Math.abs(rect.height - oldHeight) > 1) {
+        initCanvas(selectedDesign);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [selectedDesign, isRevealed, canvasReady, initCanvas]);
 
   const calculateScratchProgress = useCallback(() => {
     const canvas = canvasRef.current;
@@ -152,31 +172,35 @@ export function ScratchPage() {
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const dpr = dprRef.current;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     
-    const canvasX = (clientX - rect.left);
-    const canvasY = (clientY - rect.top);
+    const canvasX = (clientX - rect.left) * scaleX;
+    const canvasY = (clientY - rect.top) * scaleY;
 
-    if (canvasX < 0 || canvasY < 0 || canvasX > rect.width || canvasY > rect.height) {
+    if (canvasX < 0 || canvasY < 0 || canvasX > canvas.width || canvasY > canvas.height) {
       return;
     }
 
+    const brushSize = 28 * (window.devicePixelRatio || 1);
+
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
 
     ctx.globalCompositeOperation = 'destination-out';
     
     ctx.beginPath();
-    ctx.arc(canvasX, canvasY, 28, 0, Math.PI * 2);
+    ctx.arc(canvasX, canvasY, brushSize, 0, Math.PI * 2);
     ctx.fill();
 
-    if (lastPosRef.current.x !== 0 || lastPosRef.current.y !== 0) {
+    const lastX = lastPosRef.current.x;
+    const lastY = lastPosRef.current.y;
+    if (lastX !== 0 || lastY !== 0) {
       ctx.beginPath();
-      ctx.lineWidth = 56;
+      ctx.lineWidth = brushSize * 2;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+      ctx.moveTo(lastX, lastY);
       ctx.lineTo(canvasX, canvasY);
       ctx.stroke();
     }
@@ -243,16 +267,16 @@ export function ScratchPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-8">
       <div className="text-center">
         <motion.h1
-          className="text-3xl sm:text-4xl font-bold mb-2"
+          className="text-2xl sm:text-4xl font-bold mb-2"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
           🎫 刮刮樂
         </motion.h1>
-        <p className="text-white/60">選擇一張刮刮樂，刮開銀漆揭曉你的獎品！</p>
+        <p className="text-white/60 text-sm sm:text-base">選擇一張刮刮樂，刮開銀漆揭曉你的獎品！</p>
       </div>
 
       <div className="flex justify-center gap-4">
@@ -288,7 +312,7 @@ export function ScratchPage() {
         {!selectedDesign ? (
           <motion.div
             key="selection"
-            className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto"
+            className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 max-w-2xl mx-auto px-2"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -298,36 +322,40 @@ export function ScratchPage() {
                 key={design.id}
                 onClick={() => handleSelectDesign(design)}
                 disabled={!canDraw}
-                className={`game-card text-center ${!canDraw ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`game-card text-center p-3 sm:p-4 ${!canDraw ? 'opacity-50 cursor-not-allowed' : ''}`}
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: i * 0.1 }}
                 whileHover={canDraw ? { scale: 1.05 } : undefined}
                 whileTap={canDraw ? { scale: 0.95 } : undefined}
               >
-                <div className={`w-full aspect-[3/4] rounded-xl bg-gradient-to-br ${design.bgGradient} mb-3 flex items-center justify-center shadow-lg`}>
-                  <span className="text-5xl">{design.emoji}</span>
+                <div className={`w-full aspect-[3/4] rounded-lg sm:rounded-xl bg-gradient-to-br ${design.bgGradient} mb-2 sm:mb-3 flex items-center justify-center shadow-lg`}>
+                  <span className="text-3xl sm:text-5xl">{design.emoji}</span>
                 </div>
-                <p className="font-bold">{design.name}</p>
+                <p className="font-bold text-sm sm:text-base">{design.name}</p>
               </motion.button>
             ))}
           </motion.div>
         ) : (
           <motion.div
             key="scratch"
-            className="flex flex-col items-center"
+            className="flex flex-col items-center px-4"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
           >
-            <div 
-              ref={containerRef}
-              className="relative w-80 sm:w-96 aspect-[3/4] max-w-full select-none"
-            >
-              <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${selectedDesign.bgGradient} shadow-2xl overflow-hidden`}>
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
+            <div className={`p-2 sm:p-3 rounded-2xl bg-gradient-to-br ${selectedDesign.bgGradient} shadow-2xl`}>
+              <div 
+                ref={containerRef}
+                className="relative overflow-hidden rounded-xl select-none bg-white/10"
+                style={{ 
+                  width: 'min(300px, calc(100vw - 80px))',
+                  height: 'min(400px, calc((100vw - 80px) * 4 / 3))',
+                }}
+              >
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
                   <motion.div
-                    className="text-6xl sm:text-7xl mb-4"
+                    className="text-5xl sm:text-6xl mb-3"
                     animate={isRevealed ? { scale: [1, 1.3, 1], rotate: [0, 10, -10, 0] } : {}}
                     transition={{ duration: 0.5 }}
                   >
@@ -340,39 +368,40 @@ export function ScratchPage() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: isRevealed ? 1 : 0.3, y: 0 }}
                     >
-                      <h3 className="text-xl sm:text-2xl font-bold text-white text-shadow-lg mb-2">
+                      <h3 className="text-lg sm:text-xl font-bold text-white text-shadow-lg mb-2">
                         {currentPrize.name}
                       </h3>
-                      <span className={`inline-block px-4 py-1 rounded-full text-sm font-medium bg-white/30 text-white`}>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-white/30 text-white`}>
                         {RARITY_LABELS[currentPrize.rarity]}
                       </span>
                     </motion.div>
                   )}
                 </div>
 
-                <div className="absolute top-4 left-4 text-3xl">{selectedDesign.emoji}</div>
-                <div className="absolute top-4 right-4 text-3xl">{selectedDesign.emoji}</div>
-                <div className="absolute bottom-4 left-4 text-3xl">{selectedDesign.emoji}</div>
-                <div className="absolute bottom-4 right-4 text-3xl">{selectedDesign.emoji}</div>
-              </div>
+                <div className="absolute top-2 left-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
+                <div className="absolute top-2 right-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
+                <div className="absolute bottom-2 left-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
+                <div className="absolute bottom-2 right-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
 
-              <canvas
-                ref={canvasRef}
-                className={`absolute inset-0 rounded-2xl ${
-                  isRevealed ? 'opacity-0 pointer-events-none transition-opacity duration-500' : ''
-                }`}
-                style={{
-                  touchAction: 'none',
-                  cursor: canvasReady ? 'crosshair' : 'wait',
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-              />
+                <canvas
+                  ref={canvasRef}
+                  className={`absolute inset-0 rounded-xl ${
+                    isRevealed ? 'opacity-0 pointer-events-none transition-opacity duration-500' : ''
+                  }`}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    touchAction: 'none',
+                    cursor: canvasReady ? 'crosshair' : 'wait',
+                  }}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerLeave={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
+                />
+              </div>
             </div>
 
             {!isRevealed && (
