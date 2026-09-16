@@ -344,15 +344,18 @@ export function ScratchPage() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
           >
-            <div 
-              ref={containerRef}
-              className="relative w-full max-w-[320px] sm:max-w-[360px] overflow-hidden rounded-2xl shadow-2xl select-none"
-              style={{ aspectRatio: '3 / 4' }}
-            >
-              <div className={`absolute inset-0 bg-gradient-to-br ${selectedDesign.bgGradient}`}>
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
+            <div className={`p-2 sm:p-3 rounded-2xl bg-gradient-to-br ${selectedDesign.bgGradient} shadow-2xl`}>
+              <div 
+                ref={containerRef}
+                className="relative overflow-hidden rounded-xl select-none bg-white/10"
+                style={{ 
+                  width: 'min(300px, calc(100vw - 80px))',
+                  height: 'min(400px, calc((100vw - 80px) * 4 / 3))',
+                }}
+              >
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
                   <motion.div
-                    className="text-6xl sm:text-7xl mb-4"
+                    className="text-5xl sm:text-6xl mb-3"
                     animate={isRevealed ? { scale: [1, 1.3, 1], rotate: [0, 10, -10, 0] } : {}}
                     transition={{ duration: 0.5 }}
                   >
@@ -365,40 +368,40 @@ export function ScratchPage() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: isRevealed ? 1 : 0.3, y: 0 }}
                     >
-                      <h3 className="text-xl sm:text-2xl font-bold text-white text-shadow-lg mb-2">
+                      <h3 className="text-lg sm:text-xl font-bold text-white text-shadow-lg mb-2">
                         {currentPrize.name}
                       </h3>
-                      <span className={`inline-block px-4 py-1 rounded-full text-sm font-medium bg-white/30 text-white`}>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs sm:text-sm font-medium bg-white/30 text-white`}>
                         {RARITY_LABELS[currentPrize.rarity]}
                       </span>
                     </motion.div>
                   )}
                 </div>
 
-                <div className="absolute top-3 left-3 text-2xl sm:text-3xl opacity-80">{selectedDesign.emoji}</div>
-                <div className="absolute top-3 right-3 text-2xl sm:text-3xl opacity-80">{selectedDesign.emoji}</div>
-                <div className="absolute bottom-3 left-3 text-2xl sm:text-3xl opacity-80">{selectedDesign.emoji}</div>
-                <div className="absolute bottom-3 right-3 text-2xl sm:text-3xl opacity-80">{selectedDesign.emoji}</div>
-              </div>
+                <div className="absolute top-2 left-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
+                <div className="absolute top-2 right-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
+                <div className="absolute bottom-2 left-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
+                <div className="absolute bottom-2 right-2 text-xl sm:text-2xl opacity-60">{selectedDesign.emoji}</div>
 
-              <canvas
-                ref={canvasRef}
-                className={`absolute inset-0 rounded-2xl ${
-                  isRevealed ? 'opacity-0 pointer-events-none transition-opacity duration-500' : ''
-                }`}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'block',
-                  touchAction: 'none',
-                  cursor: canvasReady ? 'crosshair' : 'wait',
-                }}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerLeave={handlePointerUp}
-                onPointerCancel={handlePointerUp}
-              />
+                <canvas
+                  ref={canvasRef}
+                  className={`absolute inset-0 rounded-xl ${
+                    isRevealed ? 'opacity-0 pointer-events-none transition-opacity duration-500' : ''
+                  }`}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'block',
+                    touchAction: 'none',
+                    cursor: canvasReady ? 'crosshair' : 'wait',
+                  }}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerLeave={handlePointerUp}
+                  onPointerCancel={handlePointerUp}
+                />
+              </div>
             </div>
 
             {!isRevealed && (
