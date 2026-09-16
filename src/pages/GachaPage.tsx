@@ -345,26 +345,26 @@ export function GachaPage() {
   const finalCapsuleColor = currentPrize ? getCapsuleColor(currentPrize) : (exitingCapsule?.color || CAPSULE_COLORS[0]);
 
   return (
-    <div className="space-y-8">
-      <div className="text-center">
+    <div className="space-y-6 sm:space-y-8 pb-8">
+      <div className="text-center pt-2">
         <motion.h1
-          className="text-3xl sm:text-4xl font-bold mb-2"
+          className="text-2xl sm:text-4xl font-bold mb-1 sm:mb-2"
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
         >
           🎰 扭蛋機
         </motion.h1>
-        <p className="text-white/60">投入硬幣，轉動扭蛋機，看看會抽到什麼！</p>
+        <p className="text-white/60 text-sm sm:text-base">投入硬幣，轉動扭蛋機，看看會抽到什麼！</p>
       </div>
 
-      <div className="flex justify-center">
+      <div className="flex justify-center overflow-visible">
         <motion.div
-          className="relative"
+          className="relative overflow-visible"
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
         >
           <motion.div 
-            className="relative w-72 sm:w-96 h-[26rem] sm:h-[32rem]"
+            className="relative w-64 sm:w-80 md:w-96 h-[22rem] sm:h-[28rem] md:h-[32rem] overflow-visible"
             animate={
               drawPhase === 'shaking' && !prefersReducedMotion
                 ? { x: [0, -3, 3, -2, 2, -1, 1, 0], rotate: [0, -0.5, 0.5, -0.3, 0.3, 0] }
