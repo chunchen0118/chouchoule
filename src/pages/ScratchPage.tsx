@@ -29,10 +29,14 @@ export function ScratchPage() {
   const [isRevealed, setIsRevealed] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [scratchProgress, setScratchProgress] = useState(0);
+  const [canvasReady, setCanvasReady] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const isDrawingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
+  const hasInitializedRef = useRef(false);
+  const dprRef = useRef(window.devicePixelRatio || 1);
 
   const settings = state.scratch;
   const totalWeight = settings.prizes.reduce((sum, p) => sum + p.weight, 0);
@@ -41,29 +45,40 @@ export function ScratchPage() {
     : settings.prizes;
   const canDraw = availablePrizes.length > 0 && totalWeight > 0;
 
-  const initCanvas = useCallback(() => {
+  const initCanvas = useCallback((design: ScratchCardDesign) => {
     const canvas = canvasRef.current;
-    if (!canvas || !selectedDesign) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return false;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return false;
 
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * window.devicePixelRatio;
-    canvas.height = rect.height * window.devicePixelRatio;
-    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    const dpr = dprRef.current;
+    
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
 
-    ctx.fillStyle = selectedDesign.foilColor;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = design.foilColor;
     ctx.fillRect(0, 0, rect.width, rect.height);
 
-    ctx.fillStyle = '#888';
-    ctx.font = 'bold 16px sans-serif';
+    ctx.fillStyle = '#666';
+    ctx.font = 'bold 18px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('刮開此處', rect.width / 2, rect.height / 2 - 10);
-    ctx.font = '12px sans-serif';
-    ctx.fillText('SCRATCH HERE', rect.width / 2, rect.height / 2 + 10);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('刮開此處', rect.width / 2, rect.height / 2 - 12);
+    ctx.font = '14px sans-serif';
+    ctx.fillText('SCRATCH HERE', rect.width / 2, rect.height / 2 + 12);
 
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 60; i++) {
       ctx.beginPath();
       ctx.arc(
         Math.random() * rect.width,
@@ -72,65 +87,101 @@ export function ScratchPage() {
         0,
         Math.PI * 2
       );
-      ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.3})`;
+      ctx.fillStyle = `rgba(255, 255, 255, ${Math.random() * 0.3 + 0.1})`;
       ctx.fill();
     }
-  }, [selectedDesign]);
+
+    return true;
+  }, []);
 
   useEffect(() => {
-    if (selectedDesign && !isRevealed) {
+    if (selectedDesign && !isRevealed && !hasInitializedRef.current) {
+      hasInitializedRef.current = true;
+      
       const prize = draw('scratch');
       setCurrentPrize(prize);
       setScratchProgress(0);
-      
-      setTimeout(initCanvas, 100);
+      setCanvasReady(false);
+
+      const attemptInit = (attempts = 0) => {
+        if (attempts > 20) {
+          console.error('Failed to initialize canvas after multiple attempts');
+          return;
+        }
+        
+        requestAnimationFrame(() => {
+          const success = initCanvas(selectedDesign);
+          if (success) {
+            setCanvasReady(true);
+          } else {
+            setTimeout(() => attemptInit(attempts + 1), 50);
+          }
+        });
+      };
+
+      attemptInit();
     }
-  }, [selectedDesign, initCanvas, draw, isRevealed]);
+  }, [selectedDesign, isRevealed, initCanvas, draw]);
 
   const calculateScratchProgress = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return 0;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return 0;
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
     let transparentPixels = 0;
+    const totalPixels = pixels.length / 4;
 
     for (let i = 3; i < pixels.length; i += 4) {
-      if (pixels[i] === 0) {
+      if (pixels[i] < 128) {
         transparentPixels++;
       }
     }
 
-    return transparentPixels / (pixels.length / 4);
+    return transparentPixels / totalPixels;
   }, []);
 
-  const scratch = useCallback((x: number, y: number) => {
+  const scratch = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current;
-    if (!canvas || isRevealed) return;
+    if (!canvas || isRevealed || !canvasReady) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    const canvasX = x - rect.left;
-    const canvasY = y - rect.top;
+    const dpr = dprRef.current;
+    
+    const canvasX = (clientX - rect.left);
+    const canvasY = (clientY - rect.top);
+
+    if (canvasX < 0 || canvasY < 0 || canvasX > rect.width || canvasY > rect.height) {
+      return;
+    }
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
 
     ctx.globalCompositeOperation = 'destination-out';
+    
     ctx.beginPath();
-    ctx.arc(canvasX, canvasY, 25, 0, Math.PI * 2);
+    ctx.arc(canvasX, canvasY, 28, 0, Math.PI * 2);
     ctx.fill();
 
-    if (lastPosRef.current.x && lastPosRef.current.y) {
+    if (lastPosRef.current.x !== 0 || lastPosRef.current.y !== 0) {
       ctx.beginPath();
-      ctx.lineWidth = 50;
+      ctx.lineWidth = 56;
       ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
       ctx.lineTo(canvasX, canvasY);
       ctx.stroke();
     }
+
+    ctx.restore();
 
     lastPosRef.current = { x: canvasX, y: canvasY };
 
@@ -141,56 +192,54 @@ export function ScratchPage() {
       setIsRevealed(true);
       setTimeout(() => setShowResult(true), 300);
     }
-  }, [isRevealed, calculateScratchProgress]);
+  }, [isRevealed, canvasReady, calculateScratchProgress]);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.setPointerCapture(e.pointerId);
+    }
     isDrawingRef.current = true;
-    scratch(e.clientX, e.clientY);
-  }, [scratch]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDrawingRef.current) return;
-    scratch(e.clientX, e.clientY);
-  }, [scratch]);
-
-  const handleMouseUp = useCallback(() => {
-    isDrawingRef.current = false;
     lastPosRef.current = { x: 0, y: 0 };
-  }, []);
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
-    isDrawingRef.current = true;
-    const touch = e.touches[0];
-    scratch(touch.clientX, touch.clientY);
+    scratch(e.clientX, e.clientY);
   }, [scratch]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    e.preventDefault();
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
     if (!isDrawingRef.current) return;
-    const touch = e.touches[0];
-    scratch(touch.clientX, touch.clientY);
+    e.preventDefault();
+    scratch(e.clientX, e.clientY);
   }, [scratch]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      canvas.releasePointerCapture(e.pointerId);
+    }
     isDrawingRef.current = false;
     lastPosRef.current = { x: 0, y: 0 };
   }, []);
 
   const handleSelectDesign = (design: ScratchCardDesign) => {
     if (!canDraw) return;
+    hasInitializedRef.current = false;
     setSelectedDesign(design);
     setIsRevealed(false);
     setShowResult(false);
     setCurrentPrize(null);
+    setCanvasReady(false);
+    lastPosRef.current = { x: 0, y: 0 };
   };
 
   const handleReset = () => {
+    hasInitializedRef.current = false;
     setSelectedDesign(null);
     setCurrentPrize(null);
     setIsRevealed(false);
     setShowResult(false);
     setScratchProgress(0);
+    setCanvasReady(false);
+    lastPosRef.current = { x: 0, y: 0 };
   };
 
   return (
@@ -271,7 +320,10 @@ export function ScratchPage() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
           >
-            <div className="relative w-80 sm:w-96 aspect-[3/4] max-w-full">
+            <div 
+              ref={containerRef}
+              className="relative w-80 sm:w-96 aspect-[3/4] max-w-full select-none"
+            >
               <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${selectedDesign.bgGradient} shadow-2xl overflow-hidden`}>
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
                   <motion.div
@@ -306,16 +358,20 @@ export function ScratchPage() {
 
               <canvas
                 ref={canvasRef}
-                className={`absolute inset-0 w-full h-full rounded-2xl scratch-canvas ${
+                className={`absolute inset-0 rounded-2xl ${
                   isRevealed ? 'opacity-0 pointer-events-none transition-opacity duration-500' : ''
                 }`}
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
+                style={{
+                  touchAction: 'none',
+                  cursor: canvasReady ? 'crosshair' : 'wait',
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                }}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerUp}
+                onPointerCancel={handlePointerUp}
               />
             </div>
 
@@ -336,6 +392,9 @@ export function ScratchPage() {
                   刮開進度: {Math.round(scratchProgress * 100)}% 
                   {scratchProgress < REVEAL_THRESHOLD && ` (需達 ${REVEAL_THRESHOLD * 100}%)`}
                 </p>
+                {!canvasReady && (
+                  <p className="text-xs text-yellow-400 mt-1">載入中...</p>
+                )}
               </motion.div>
             )}
           </motion.div>
